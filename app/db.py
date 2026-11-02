@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 import uuid
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, inspect
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -15,7 +15,7 @@ class Post(Base):
     __tablename__ = 'posts'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    cation=Column(Text)
+    caption=Column(Text)
     url=Column(String, nullable=False)
     file_type=Column(String, nullable=False)
     file_name=Column(String, nullable=False)
@@ -27,6 +27,14 @@ async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
 async def create_db_and_table():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate_legacy_caption_column)
+
+def _migrate_legacy_caption_column(connection):
+    columns = {column["name"] for column in inspect(connection).get_columns("posts")}
+    if "caption" in columns and "caption" not in columns:
+        connection.exec_driver_sql(
+            "ALTER TABLE posts RENAME COLUMN caption TO caption"
+        )
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
